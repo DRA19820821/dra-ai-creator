@@ -1,0 +1,64 @@
+# ============================================
+# Configuração do Streamlit 1.39+ (Outubro 2025)
+# AI Agent Flow
+# ============================================
+
+# NOTA: Este arquivo contém apenas configurações
+# válidas para Streamlit 1.39+. Configurações
+# depreciadas foram removidas.
+
+[server]
+# Porta do servidor
+port = 8501
+
+# Habilita CORS (Cross-Origin Resource Sharing)
+enableCORS = true
+
+# Habilita proteção XSRF
+enableXsrfProtection = true
+
+# Limite de upload em MB
+maxUploadSize = 200
+
+# Headless mode (para deploy)
+headless = false
+
+[browser]
+# Coleta de estatísticas de uso (opcional - desabilitar para privacidade)
+gatherUsageStats = false
+
+[theme]
+# Tema customizado - Modo Escuro
+primaryColor = "#1E88E5"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E1E1E"
+textColor = "#FAFAFA"
+font = "sans serif"
+
+# Tema Claro Alternativo - Descomente para usar
+# primaryColor = "#FF4B4B"
+# backgroundColor = "#FFFFFF"
+# secondaryBackgroundColor = "#F0F2F6"
+# textColor = "#31333F"
+# font = "sans serif"
+
+[runner]
+# Habilita "magic" commands
+magicEnabled = true
+
+# Fast reruns (experimental)
+# fastReruns = true
+
+[logger]
+# Nível de log: "error", "warning", "info", "debug"
+level = "info"
+
+# Formato da mensagem
+messageFormat = "%(asctime)s %(message)s"
+
+[global]
+# Aviso quando executar script diretamente com python
+showWarningOnDirectExecution = true
+
+# Desabilita aviso de duplicação de widget state
+disableWidgetStateDuplicationWarning = false
