@@ -175,16 +175,21 @@ def route_after_plan_review(state: AgentState) -> str:
 
 def route_after_user_approval(state: AgentState) -> str:
     """
-    Função de roteamento após checkpoint de aprovação do usuário
+    ✅ CORRIGIDO: Função de roteamento após checkpoint de aprovação do usuário
     
     Args:
         state: Estado atual
         
     Returns:
-        Nome do próximo nó
+        Nome do próximo nó ou "wait" para pausar
     """
+    # Se aprovado explicitamente, prosseguir
     if state.get("user_approved", False):
         return "build_solution"
-    else:
-        # Usuário deu feedback
+    
+    # Se há feedback, processar
+    if state.get("user_feedback"):
         return "process_feedback"
+    
+    # ✅ Se nenhum dos dois, terminar e aguardar decisão do usuário
+    return "wait"

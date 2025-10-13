@@ -1,7 +1,7 @@
 """
 Definição dos Estados do Grafo LangGraph
 """
-from typing import Annotated, Optional, Literal
+from typing import Annotated, Optional, Literal, Union
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -43,7 +43,7 @@ class Plan(BaseModel):
     steps: list[dict] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
     estimated_complexity: Literal["low", "medium", "high", "very_high"] = "medium"
-    risks: list[str] = Field(default_factory=list)
+    risks: list[dict] = Field(default_factory=list)  # ✅ CORRIGIDO: aceita dict com risk/mitigation
     prerequisites: list[str] = Field(default_factory=list)
 
 

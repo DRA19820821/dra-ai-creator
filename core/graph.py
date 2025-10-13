@@ -93,13 +93,14 @@ def create_agent_graph():
         }
     )
     
-    # Após aprovação do usuário (CHECKPOINT)
+    # ✅ CORRIGIDO: Após aprovação do usuário (CHECKPOINT)
     workflow.add_conditional_edges(
         "wait_user_approval",
         route_after_user_approval,
         {
             "build_solution": "build_solution",
-            "process_feedback": "process_feedback"
+            "process_feedback": "process_feedback",
+            "wait": END  # ✅ Adicionada opção de terminar e aguardar
         }
     )
     
@@ -178,13 +179,21 @@ def get_graph_visualization() -> str:
        │      │      ↓
        │      │   (continua para BUILD)
        │      │
-       │      └─→ [FEEDBACK DO USUÁRIO]
+       │      ├─→ [FEEDBACK DO USUÁRIO]
+       │      │      ↓
+       │      │   ┌──────────────────────────┐
+       │      │   │ process_feedback         │  ← Processa feedback e ajusta
+       │      │   └──────────────────────────┘
+       │      │      ↓
+       │      │      (volta para review_plan)
+       │      │
+       │      └─→ [AGUARDANDO DECISÃO]
        │             ↓
-       │   ┌──────────────────────────┐
-       │   │ process_feedback         │  ← Processa feedback e ajusta
-       │   └──────────────────────────┘
-       │             ↓
-       └─────────────┘ (volta para review_plan)
+       │          [END] ← ⏸️ Grafo pausa aqui
+       │
+       └─→ [SE NÃO APROVADO]
+              ↓
+           (vai para process_feedback)
     
     [APÓS APROVAÇÃO]
        ↓

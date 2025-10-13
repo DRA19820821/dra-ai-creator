@@ -1,5 +1,5 @@
 """
-Interface Streamlit - AI Agent Flow
+Interface Streamlit - AI Agent Flow (VERSÃO CORRIGIDA)
 """
 import streamlit as st
 import json
@@ -165,16 +165,16 @@ with st.sidebar:
     
     # Seleção para cada função
     st.markdown("#### Classificador")
-    classifier_model = select_model("classifier", "Classificação", "Anthropic")
+    classifier_model = select_model("classifier", "Classificação", "Google")
     
     st.markdown("#### Planejador")
-    planner_model = select_model("planner", "Planejamento", "Anthropic")
+    planner_model = select_model("planner", "Planejamento", "Google")
     
     st.markdown("#### Construtor")
-    builder_model = select_model("builder", "Construção", "Anthropic")
+    builder_model = select_model("builder", "Construção", "Google")
     
     st.markdown("#### Revisor")
-    reviewer_model = select_model("reviewer", "Revisão", "Anthropic")
+    reviewer_model = select_model("reviewer", "Revisão", "Google")
     
     # Armazenar seleções
     st.session_state.selected_models = {
@@ -426,7 +426,7 @@ with tab2:
                         for s in review["suggestions"]:
                             st.write(f"- {s}")
             
-            # CHECKPOINT: Aprovação do usuário
+            # ✅ CHECKPOINT CORRIGIDO: Aprovação do usuário
             if state.get("current_step") in ["wait_user_approval", "waiting_approval"]:
                 st.markdown("---")
                 st.markdown("### ✋ Decisão Necessária")
@@ -435,11 +435,27 @@ with tab2:
                 
                 with col1:
                     if st.button("✅ Aprovar e Prosseguir", type="primary", use_container_width=True):
+                        # Atualizar estado
                         st.session_state.state["user_approved"] = True
                         st.session_state.state["user_feedback"] = None
                         st.session_state.execution_paused = False
-                        st.success("Plano aprovado! Prosseguindo para construção...")
-                        st.rerun()
+                        
+                        # ✅ Retomar execução automaticamente
+                        with st.spinner("Retomando execução..."):
+                            try:
+                                graph = st.session_state.graph
+                                config = {"configurable": {"thread_id": st.session_state.session_id}}
+                                
+                                result = graph.invoke(st.session_state.state, config)
+                                
+                                if result is not None:
+                                    st.session_state.state = result
+                                
+                                st.success("Plano aprovado! Prosseguindo para construção...")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao retomar: {str(e)}")
+                                logger.log_node_error("resume", e)
                 
                 with col2:
                     if st.button("✏️ Solicitar Ajustes", type="secondary", use_container_width=True):
@@ -457,8 +473,23 @@ with tab2:
                             st.session_state.state["user_feedback"] = feedback
                             st.session_state.state["user_approved"] = False
                             st.session_state.show_feedback_form = False
-                            st.success("Feedback enviado! Ajustando plano...")
-                            st.rerun()
+                            
+                            # ✅ Retomar execução para processar feedback
+                            with st.spinner("Processando feedback e ajustando plano..."):
+                                try:
+                                    graph = st.session_state.graph
+                                    config = {"configurable": {"thread_id": st.session_state.session_id}}
+                                    
+                                    result = graph.invoke(st.session_state.state, config)
+                                    
+                                    if result is not None:
+                                        st.session_state.state = result
+                                    
+                                    st.success("Feedback enviado! Ajustando plano...")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao processar feedback: {str(e)}")
+                                    logger.log_node_error("feedback_processing", e)
                         else:
                             st.error("Por favor, descreva os ajustes necessários")
         else:
@@ -517,6 +548,13 @@ with tab3:
             
             st.markdown("---")
             
+            # ✅ CORRIGIDO: Verificar se já está no checkpoint
+            current_step = state.get("current_step", "")
+            if current_step in ["wait_user_approval", "waiting_approval"]:
+                st.session_state.execution_paused = True
+                st.warning("⏸️ **Execução pausada no checkpoint**")
+                st.info("👉 Vá para a aba **'Planejamento'** para aprovar ou solicitar ajustes no plano.")
+            
             # Botão de execução
             if not st.session_state.execution_paused:
                 if st.button("▶️ Executar Próximo Passo", type="primary", use_container_width=True):
@@ -526,6 +564,12 @@ with tab3:
                             config = {"configurable": {"thread_id": st.session_state.session_id}}
                             
                             result = graph.invoke(state, config)
+                            
+                            # ✅ Verificar se resultado é válido
+                            if result is None:
+                                st.error("Erro: Grafo retornou None. Possível problema de configuração.")
+                                logger.log_node_error("execution", Exception("Graph returned None"))
+                                return
                             
                             st.session_state.state = result
                             
@@ -538,7 +582,11 @@ with tab3:
                             
                         except Exception as e:
                             st.error(f"Erro na execução: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
                             logger.log_node_error("execution", e)
+            else:
+                st.info("⏸️ Execução pausada. Aprove o plano na aba 'Planejamento' para continuar.")
             
             # Mensagens e erros
             if state.get("errors"):
