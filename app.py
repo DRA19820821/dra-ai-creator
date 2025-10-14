@@ -498,6 +498,11 @@ with tab2:
 
 
 # TAB 3: EXECUÇÃO
+# TAB 3: EXECUÇÃO - Trecho corrigido para substituir no app.py
+
+# Procure por "# TAB 3: EXECUÇÃO" no seu app.py e substitua todo o conteúdo
+# da aba tab3 por este código:
+
 with tab3:
     st.markdown("### ⚙️ Status da Execução")
     
@@ -565,25 +570,28 @@ with tab3:
                             
                             result = graph.invoke(state, config)
                             
-                            # ✅ Verificar se resultado é válido
+                            # ✅ CORRIGIDO: Verificar se resultado é válido sem usar return
                             if result is None:
-                                st.error("Erro: Grafo retornou None. Possível problema de configuração.")
+                                st.error("❌ Erro: Grafo retornou None. Possível problema de configuração.")
                                 logger.log_node_error("execution", Exception("Graph returned None"))
-                                return
-                            
-                            st.session_state.state = result
-                            
-                            # Verificar se chegou no checkpoint
-                            if result.get("current_step") in ["wait_user_approval", "waiting_approval"]:
-                                st.session_state.execution_paused = True
-                                st.info("⏸️ Execução pausada. Aguardando sua aprovação na aba 'Planejamento'")
-                            
-                            st.rerun()
+                            else:
+                                # Atualizar estado apenas se result não for None
+                                st.session_state.state = result
+                                
+                                # Verificar se chegou no checkpoint
+                                if result.get("current_step") in ["wait_user_approval", "waiting_approval"]:
+                                    st.session_state.execution_paused = True
+                                    st.info("⏸️ Execução pausada. Aguardando sua aprovação na aba 'Planejamento'")
+                                
+                                # Recarregar página
+                                st.rerun()
                             
                         except Exception as e:
-                            st.error(f"Erro na execução: {str(e)}")
-                            import traceback
-                            st.code(traceback.format_exc())
+                            st.error(f"❌ Erro na execução: {str(e)}")
+                            # Mostrar traceback completo em um expander
+                            with st.expander("🔍 Ver detalhes do erro"):
+                                import traceback
+                                st.code(traceback.format_exc())
                             logger.log_node_error("execution", e)
             else:
                 st.info("⏸️ Execução pausada. Aprove o plano na aba 'Planejamento' para continuar.")

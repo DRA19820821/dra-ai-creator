@@ -22,25 +22,48 @@ Implementar a solução completa seguindo o plano aprovado. A solução deve ser
 - **Testável**: Inclui testes quando apropriado
 - **Documentada**: README e comentários adequados
 
-## RESPOSTA ESPERADA (JSON):
+## IMPORTANTE - FORMATO DO CAMPO "files":
+O campo "files" DEVE ser um objeto/dicionário com pares chave-valor onde:
+- CHAVE = nome do arquivo (string)
+- VALOR = conteúdo completo do arquivo (string)
 
-```json
+NUNCA retorne "files" como string simples ou lista!
+
+## RESPOSTA ESPERADA (JSON ESTRUTURADO):
+
+Você DEVE retornar um JSON com EXATAMENTE esta estrutura:
+
 {{
-  "code": "código principal aqui (pode ser multiline string)",
+  "code": "código principal se aplicável (pode ser null)",
   "files": {{
-    "main.py": "conteúdo do arquivo",
-    "requirements.txt": "dependências",
-    "README.md": "documentação",
-    "tests/test_main.py": "testes (se aplicável)",
-    ...
+    "nome_do_arquivo_1.py": "conteúdo completo do arquivo 1 aqui...",
+    "nome_do_arquivo_2.py": "conteúdo completo do arquivo 2 aqui...",
+    "README.md": "# Documentação\\n\\nConteúdo do README...",
+    "requirements.txt": "streamlit==1.39.0\\npandas==2.2.3"
   }},
-  "documentation": "documentação geral da solução",
-  "dependencies": ["lib1==version", "lib2==version", ...],
-  "setup_instructions": "instruções de setup passo a passo",
-  "usage_examples": "exemplos de uso",
-  "architecture_notes": "notas sobre arquitetura e decisões técnicas"
+  "documentation": "documentação geral da solução em markdown",
+  "tests": "código de testes se aplicável (pode ser null)",
+  "dependencies": ["streamlit==1.39.0", "pandas==2.2.3"],
+  "setup_instructions": "## Instruções de Setup\\n\\n1. Clone o repositório\\n2. ...",
+  "usage_examples": "## Exemplos de Uso\\n\\n```python\\n# exemplo aqui\\n```",
+  "architecture_notes": "## Arquitetura\\n\\n- Decisões técnicas..."
 }}
-```
+
+## EXEMPLO CORRETO DE "files":
+
+{{
+  "files": {{
+    "app.py": "import streamlit as st\\n\\nst.title('Minha App')\\n...",
+    "utils.py": "def helper():\\n    pass\\n...",
+    "README.md": "# Projeto\\n\\nDescrição..."
+  }}
+}}
+
+## EXEMPLO ERRADO - NÃO FAÇA ISSO:
+
+❌ ERRADO: "files": "app.py"
+❌ ERRADO: "files": ["app.py", "utils.py"]
+❌ ERRADO: "files": "app.py, utils.py"
 
 ## DIRETRIZES ESPECÍFICAS POR TIPO:
 
@@ -50,6 +73,7 @@ Implementar a solução completa seguindo o plano aprovado. A solução deve ser
 - Adicione logging adequado
 - Crie testes unitários básicos
 - Documente a API/interface
+- SEMPRE crie múltiplos arquivos organizados
 
 ### Para DATA_PIPELINE:
 - Use PySpark se especificado
@@ -72,8 +96,9 @@ Implementar a solução completa seguindo o plano aprovado. A solução deve ser
 - Type hints onde possível
 - Error handling apropriado
 - Comentários para lógica complexa
+- SEMPRE retorne "files" como DICIONÁRIO
 
-Responda APENAS com o JSON, sem texto adicional antes ou depois."""
+Responda APENAS com o JSON válido, sem texto adicional antes ou depois."""
 
 
 CODE_REVIEWER_PROMPT = """Você é um code reviewer sênior especializado em garantir qualidade de código.
@@ -98,17 +123,18 @@ Revise o código/solução quanto a:
 
 ## SUA REVISÃO (JSON):
 
-```json
+Retorne um JSON com esta estrutura exata:
+
 {{
-  "is_approved": true/false,
-  "confidence_score": 0.0-1.0,
+  "is_approved": true ou false,
+  "confidence_score": 0.0 a 1.0,
   "issues_found": [
     {{
       "severity": "critical|high|medium|low",
       "category": "functionality|quality|security|performance|documentation",
       "issue": "descrição do problema",
       "file": "arquivo afetado",
-      "line": "linha (se aplicável)",
+      "line": número ou null,
       "fix_suggestion": "sugestão de correção"
     }}
   ],
@@ -122,21 +148,19 @@ Revise o código/solução quanto a:
   ],
   "strengths": [
     "aspecto positivo 1",
-    "aspecto positivo 2",
-    ...
+    "aspecto positivo 2"
   ],
   "code_quality_score": {{
-    "readability": 0-10,
-    "maintainability": 0-10,
-    "efficiency": 0-10,
-    "documentation": 0-10,
-    "overall": 0-10
+    "readability": 0 a 10,
+    "maintainability": 0 a 10,
+    "efficiency": 0 a 10,
+    "documentation": 0 a 10,
+    "overall": 0 a 10
   }},
   "test_coverage_assessment": "avaliação da cobertura de testes",
   "security_assessment": "avaliação de segurança",
   "overall_assessment": "avaliação geral detalhada"
 }}
-```
 
 ## CRITÉRIOS DE APROVAÇÃO:
 - Nenhum issue crítico
@@ -147,7 +171,7 @@ Revise o código/solução quanto a:
 
 Seja CRÍTICO mas CONSTRUTIVO. Identifique problemas reais e sugestões práticas.
 
-Responda APENAS com o JSON."""
+Responda APENAS com o JSON válido."""
 
 
 FINAL_VALIDATOR_PROMPT = """Você é um validador final que garante que a solução está pronta para entrega.
@@ -172,42 +196,39 @@ Execute validações finais:
 
 ## VALIDAÇÃO FINAL (JSON):
 
-```json
+Retorne um JSON com esta estrutura exata:
+
 {{
-  "is_valid": true/false,
+  "is_valid": true ou false,
   "passed_checks": [
     "check1",
-    "check2",
-    ...
+    "check2"
   ],
   "failed_checks": [
     {{
       "check": "nome do check",
       "reason": "razão da falha",
-      "blocking": true/false
+      "blocking": true ou false
     }}
   ],
   "warnings": [
     "aviso1",
-    "aviso2",
-    ...
+    "aviso2"
   ],
   "deliverables_checklist": {{
-    "code": true/false,
-    "documentation": true/false,
-    "tests": true/false,
-    "setup_instructions": true/false,
-    "dependencies": true/false
+    "code": true ou false,
+    "documentation": true ou false,
+    "tests": true ou false,
+    "setup_instructions": true ou false,
+    "dependencies": true ou false
   }},
-  "readiness_score": 0.0-1.0,
+  "readiness_score": 0.0 a 1.0,
   "final_notes": "notas finais para o usuário",
   "recommended_next_steps": [
     "próximo passo 1",
-    "próximo passo 2",
-    ...
+    "próximo passo 2"
   ]
 }}
-```
 
 ## CRITÉRIOS DE VALIDAÇÃO:
 - Nenhum failed_check com blocking=true
@@ -215,4 +236,4 @@ Execute validações finais:
 - Todos os deliverables essenciais presentes
 - Documentação suficiente para uso
 
-Responda APENAS com o JSON."""
+Responda APENAS com o JSON válido."""
