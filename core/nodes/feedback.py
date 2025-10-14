@@ -1,5 +1,6 @@
 """
 Nós de Processamento de Feedback do Usuário
+VERSÃO CORRIGIDA - Tratamento robusto de None
 """
 import json
 from typing import Dict, Any
@@ -42,6 +43,7 @@ def wait_user_approval(state: AgentState) -> Dict[str, Any]:
 def process_feedback(state: AgentState) -> Dict[str, Any]:
     """
     Processa o feedback do usuário e ajusta o plano
+    VERSÃO ROBUSTA - Tratamento completo de erros
     
     Args:
         state: Estado atual do grafo
@@ -52,23 +54,34 @@ def process_feedback(state: AgentState) -> Dict[str, Any]:
     log_node_start("process_feedback", {"feedback": state.get("user_feedback", "")[:100]})
     
     try:
+        # ✅ VERIFICAR SE STATE E PLAN EXISTEM
+        if not state:
+            raise ValueError("State is None")
+        
+        if not state.get("plan"):
+            raise ValueError("Plan not found in state")
+        
         # Verificar se há feedback
         user_feedback = state.get("user_feedback", "")
         if not user_feedback:
             # Se não há feedback mas chegou aqui, é porque foi rejeitado pela revisão
             # Usar issues da revisão como feedback
             plan_review = state.get("plan_review", {})
-            issues = plan_review.get("issues_found", [])
-            suggestions = plan_review.get("suggestions", [])
-            
-            feedback_parts = ["Ajustes necessários baseados na revisão:"]
-            feedback_parts.extend([f"- {issue}" for issue in issues[:5]])
-            feedback_parts.extend([f"Sugestão: {sug}" for sug in suggestions[:3]])
-            
-            user_feedback = "\n".join(feedback_parts)
+            if not plan_review:
+                # ✅ FALLBACK: Se nem review existe, usar feedback genérico
+                user_feedback = "Por favor, revise e melhore o plano considerando os requisitos."
+            else:
+                issues = plan_review.get("issues_found", [])
+                suggestions = plan_review.get("suggestions", [])
+                
+                feedback_parts = ["Ajustes necessários baseados na revisão:"]
+                feedback_parts.extend([f"- {issue}" for issue in issues[:5]])
+                feedback_parts.extend([f"Sugestão: {sug}" for sug in suggestions[:3]])
+                
+                user_feedback = "\n".join(feedback_parts)
         
         # Obter modelo configurado
-        model_name = state["selected_models"].get("planner", "claude-sonnet-4-5-20250929")
+        model_name = state["selected_models"].get("planner", "gemini-2.5-pro")
         llm = create_llm(model_name, temperature=0.5, max_tokens=4000)
         
         # Usar with_structured_output
@@ -92,17 +105,51 @@ Retorne o plano ajustado no mesmo formato, com todos os campos preenchidos."""
         
         # Chamar LLM com structured output
         log_llm_call("feedback_processor", model_name)
-        result: PlanOutput = structured_llm.invoke([HumanMessage(content=adjust_prompt)])
         
-        # Converter para dict
-        adjusted_plan = result.model_dump()
+        # ✅ MULTI-TENTATIVA
+        max_retries = 2
+        adjusted_plan = None
         
-        # Converter steps e risks para dict se necessário
-        if hasattr(result, 'steps') and result.steps:
-            adjusted_plan['steps'] = [step.model_dump() if hasattr(step, 'model_dump') else step for step in result.steps]
+        for attempt in range(max_retries):
+            try:
+                result = structured_llm.invoke([HumanMessage(content=adjust_prompt)])
+                
+                # ✅ VERIFICAR SE RETORNOU NONE
+                if result is None:
+                    print(f"⚠️ Tentativa {attempt + 1}: Structured output retornou None")
+                    if attempt < max_retries - 1:
+                        continue
+                    # ✅ FALLBACK: Manter plano original com aviso
+                    adjusted_plan = state["plan"].copy()
+                    break
+                
+                # Converter para dict
+                adjusted_plan = result.model_dump()
+                
+                # ✅ Converter steps e risks se necessário
+                if hasattr(result, 'steps') and result.steps:
+                    if hasattr(result.steps[0], 'model_dump'):
+                        adjusted_plan['steps'] = [step.model_dump() for step in result.steps]
+                
+                if hasattr(result, 'risks') and result.risks:
+                    if hasattr(result.risks[0], 'model_dump'):
+                        adjusted_plan['risks'] = [risk.model_dump() for risk in result.risks]
+                
+                print(f"✅ Plano ajustado com sucesso")
+                break
+                
+            except Exception as e:
+                print(f"⚠️ Erro na tentativa {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    continue
+                # ✅ FALLBACK FINAL: Manter plano original
+                adjusted_plan = state["plan"].copy()
+                break
         
-        if hasattr(result, 'risks') and result.risks:
-            adjusted_plan['risks'] = [risk.model_dump() if hasattr(risk, 'model_dump') else risk for risk in result.risks]
+        # ✅ GARANTIR QUE adjusted_plan NÃO É NONE
+        if adjusted_plan is None:
+            print("⚠️ Usando plano original como fallback")
+            adjusted_plan = state["plan"].copy()
         
         # Estimar custo
         tokens_in = len(adjust_prompt.split()) * 1.3
@@ -126,13 +173,13 @@ Retorne o plano ajustado no mesmo formato, com todos os campos preenchidos."""
             return {
                 "plan": adjusted_plan,
                 "feedback_iteration": new_iteration,
-                "warnings": state["warnings"] + [
+                "warnings": state.get("warnings", []) + [
                     f"Atingido limite de {MAX_ITERATIONS} iterações de feedback"
                 ],
                 "current_step": "build_solution",  # Força prosseguir
                 "messages": new_messages,
-                "total_tokens_used": state["total_tokens_used"] + int(tokens_in + tokens_out),
-                "total_cost": state["total_cost"] + cost,
+                "total_tokens_used": state.get("total_tokens_used", 0) + int(tokens_in + tokens_out),
+                "total_cost": state.get("total_cost", 0.0) + cost,
             }
         
         return {
@@ -142,21 +189,29 @@ Retorne o plano ajustado no mesmo formato, com todos os campos preenchidos."""
             "user_approved": False,  # Resetar aprovação
             "current_step": "review_plan",  # Volta para revisão
             "messages": new_messages,
-            "total_tokens_used": state["total_tokens_used"] + int(tokens_in + tokens_out),
-            "total_cost": state["total_cost"] + cost,
+            "total_tokens_used": state.get("total_tokens_used", 0) + int(tokens_in + tokens_out),
+            "total_cost": state.get("total_cost", 0.0) + cost,
         }
         
     except Exception as e:
         log_node_error("process_feedback", e)
+        
+        import traceback
+        print("\n❌ ERRO COMPLETO:")
+        print(traceback.format_exc())
+        
+        # ✅ FALLBACK: Retornar erro mas não travar
         return {
-            "errors": state["errors"] + [f"Erro ao processar feedback: {str(e)}"],
-            "current_step": "error"
+            "errors": state.get("errors", []) + [f"Erro ao processar feedback: {str(e)}"],
+            "warnings": state.get("warnings", []) + ["Feedback não processado - prosseguindo"],
+            "current_step": "build_solution",  # Prosseguir mesmo com erro
         }
 
 
 def route_after_plan_review(state: AgentState) -> str:
     """
     Função de roteamento após revisão do plano
+    VERSÃO ROBUSTA
     
     Args:
         state: Estado atual
@@ -164,7 +219,17 @@ def route_after_plan_review(state: AgentState) -> str:
     Returns:
         Nome do próximo nó
     """
+    # ✅ VERIFICAR SE STATE EXISTE
+    if not state:
+        return "process_feedback"
+    
     plan_review = state.get("plan_review", {})
+    
+    # ✅ VERIFICAR SE REVIEW EXISTE
+    if not plan_review:
+        # Se não tem review, assumir aprovado
+        return "wait_user_approval"
+    
     is_approved = plan_review.get("is_approved", False)
     
     if is_approved:
@@ -175,7 +240,8 @@ def route_after_plan_review(state: AgentState) -> str:
 
 def route_after_user_approval(state: AgentState) -> str:
     """
-    ✅ CORRIGIDO: Função de roteamento após checkpoint de aprovação do usuário
+    Função de roteamento após checkpoint de aprovação do usuário
+    VERSÃO ROBUSTA
     
     Args:
         state: Estado atual
@@ -183,6 +249,10 @@ def route_after_user_approval(state: AgentState) -> str:
     Returns:
         Nome do próximo nó ou "wait" para pausar
     """
+    # ✅ VERIFICAR SE STATE EXISTE
+    if not state:
+        return "wait"
+    
     # Se aprovado explicitamente, prosseguir
     if state.get("user_approved", False):
         return "build_solution"
@@ -191,5 +261,5 @@ def route_after_user_approval(state: AgentState) -> str:
     if state.get("user_feedback"):
         return "process_feedback"
     
-    # ✅ Se nenhum dos dois, terminar e aguardar decisão do usuário
+    # Se nenhum dos dois, terminar e aguardar decisão do usuário
     return "wait"

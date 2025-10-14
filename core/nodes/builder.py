@@ -361,7 +361,7 @@ def review_solution(state: AgentState) -> Dict[str, Any]:
     
     try:
         model_name = state["selected_models"].get("reviewer", "gemini-2.5-pro")
-        llm = create_llm(model_name, temperature=0.2, max_tokens=4000)
+        llm = create_llm(model_name, temperature=0.2, max_tokens=16000)
         structured_llm = llm.with_structured_output(CodeReviewOutput)
         
         prompt = CODE_REVIEWER_PROMPT.format(
