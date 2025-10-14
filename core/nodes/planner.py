@@ -193,7 +193,7 @@ def create_planning_prompts(state: AgentState) -> Dict[str, Any]:
         last_error = None
         
         for attempt in range(max_retries):
-            max_tokens = 2000 if attempt == 0 else 4000
+            max_tokens = 8000 if attempt == 0 else 16000
             
             print(f"\n🔄 Tentativa {attempt + 1}/{max_retries} (max_tokens={max_tokens})")
             
@@ -309,7 +309,7 @@ def create_plan(state: AgentState) -> Dict[str, Any]:
         last_error = None
         
         for attempt in range(max_retries):
-            max_tokens = 4000 if attempt == 0 else 8000
+            max_tokens = 8000 if attempt == 0 else 16000
             
             print(f"\n🔄 Tentativa {attempt + 1}/{max_retries} (max_tokens={max_tokens})")
             
@@ -469,7 +469,7 @@ def review_plan(state: AgentState) -> Dict[str, Any]:
         result_dict = None
         
         for attempt in range(max_retries):
-            max_tokens = 2000 if attempt == 0 else 4000
+            max_tokens = 8000 if attempt == 0 else 16000
             
             print(f"\n🔄 Review - Tentativa {attempt + 1}/{max_retries} (max_tokens={max_tokens})")
             
