@@ -1,5 +1,6 @@
 """
 Definição dos Estados do Grafo LangGraph
+VERSÃO APRIMORADA - Com campos para refinamento de requisitos
 """
 from typing import Annotated, Optional, Literal, Union
 from typing_extensions import TypedDict
@@ -43,7 +44,7 @@ class Plan(BaseModel):
     steps: list[dict] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
     estimated_complexity: Literal["low", "medium", "high", "very_high"] = "medium"
-    risks: list[dict] = Field(default_factory=list)  # ✅ CORRIGIDO: aceita dict com risk/mitigation
+    risks: list[dict] = Field(default_factory=list)
     prerequisites: list[str] = Field(default_factory=list)
 
 
@@ -62,7 +63,7 @@ class Solution(BaseModel):
     documentation: Optional[str] = None
     tests: Optional[str] = None
     dependencies: list[str] = Field(default_factory=list)
-    files: dict[str, str] = Field(default_factory=dict)  # filename -> content
+    files: dict[str, str] = Field(default_factory=dict)
     
 
 class ValidationResult(BaseModel):
@@ -80,8 +81,7 @@ class ValidationResult(BaseModel):
 class AgentState(TypedDict):
     """
     Estado principal que flui pelo grafo LangGraph
-    
-    IMPORTANTE: TypedDict é necessário para compatibilidade com LangGraph
+    VERSÃO APRIMORADA - Com suporte a refinamento de requisitos
     """
     
     # ----------------------------------------
@@ -89,6 +89,16 @@ class AgentState(TypedDict):
     # ----------------------------------------
     user_demand: str
     """Demanda original do usuário em linguagem natural"""
+    
+    # ✅ NOVO: Refinamento de Requisitos
+    refined_demand: Optional[str]
+    """Demanda refinada pelo usuário após feedback dos requisitos"""
+    
+    requirements_approved_by_user: bool
+    """Se o usuário aprovou os requisitos mesmo com issues"""
+    
+    requirements_refinement_iteration: int
+    """Contador de iterações de refinamento de requisitos"""
     
     # ----------------------------------------
     # Classificação e Requisitos
@@ -118,7 +128,7 @@ class AgentState(TypedDict):
     """Revisão do plano (serialized Review)"""
     
     # ----------------------------------------
-    # Feedback do Usuário
+    # Feedback do Usuário (Plano)
     # ----------------------------------------
     user_feedback: Optional[str]
     """Feedback do usuário sobre o plano"""
@@ -127,7 +137,7 @@ class AgentState(TypedDict):
     """Se o usuário aprovou o plano"""
     
     feedback_iteration: int
-    """Contador de iterações de feedback"""
+    """Contador de iterações de feedback do plano"""
     
     # ----------------------------------------
     # Construção
@@ -208,6 +218,11 @@ def create_initial_state(
         # Input
         user_demand=user_demand,
         
+        # ✅ NOVO: Refinamento de requisitos
+        refined_demand=None,
+        requirements_approved_by_user=False,
+        requirements_refinement_iteration=0,
+        
         # Classificação
         demand_type="unknown",
         requirements=None,
@@ -219,7 +234,7 @@ def create_initial_state(
         plan=None,
         plan_review=None,
         
-        # Feedback
+        # Feedback do plano
         user_feedback=None,
         user_approved=False,
         feedback_iteration=0,

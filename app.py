@@ -228,6 +228,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # TAB 1: INPUT DA DEMANDA
+# TAB 1: INPUT DA DEMANDA - COM CHECKPOINT DE REQUISITOS
 with tab1:
     st.markdown("### 📝 Descreva sua Demanda")
     
@@ -238,91 +239,244 @@ with tab1:
     - **Pipeline**: "Preciso de um pipeline PySpark para análise de inadimplência..."
     """)
     
-    user_demand = st.text_area(
-        "Sua demanda:",
-        height=200,
-        placeholder="Digite aqui sua demanda em linguagem natural...",
-        key="demand_input"
+    # ✅ CHECKPOINT: Verificar se está aguardando refinamento
+    state = st.session_state.state
+    is_waiting_refinement = (
+        state and 
+        state.get("current_step") == "waiting_requirements_refinement"
     )
     
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        if st.button("🚀 Iniciar Processamento", type="primary", disabled=st.session_state.execution_started):
-            if not user_demand or len(user_demand.strip()) < 20:
-                st.error("Por favor, descreva sua demanda com mais detalhes (mínimo 20 caracteres)")
-            else:
-                # Validar modelos selecionados
-                invalid_models = []
-                for func, model in st.session_state.selected_models.items():
-                    if model:
-                        is_valid, error = validate_model(model)
-                        if not is_valid:
-                            invalid_models.append(f"{func}: {error}")
+    if is_waiting_refinement:
+        # Mostrar feedback dos requisitos
+        st.warning("⚠️ **Requisitos Necessitam de Refinamento**")
+        
+        requirements_review = state.get("requirements_review", {})
+        
+        if requirements_review:
+            issues = requirements_review.get("issues_found", [])
+            suggestions = requirements_review.get("suggestions", [])
+            confidence = requirements_review.get("confidence_score", 0.0)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Confiança", f"{confidence:.0%}", delta_color="off")
+            with col2:
+                st.metric("Issues Encontrados", len(issues), delta_color="inverse")
+            
+            # Mostrar issues
+            if issues:
+                with st.expander("⚠️ Issues que Precisam ser Resolvidos", expanded=True):
+                    for i, issue in enumerate(issues, 1):
+                        st.markdown(f"**{i}.** {issue}")
+            
+            # Mostrar sugestões
+            if suggestions:
+                with st.expander("💡 Sugestões de Melhoria"):
+                    for i, sug in enumerate(suggestions, 1):
+                        st.markdown(f"**{i}.** {sug}")
+            
+            st.markdown("---")
+            
+            # Requisitos extraídos para referência
+            requirements = state.get("requirements", {})
+            if requirements:
+                with st.expander("📋 Requisitos Extraídos (para referência)"):
+                    key_reqs = requirements.get("key_requirements", [])
+                    if key_reqs:
+                        st.write("**Requisitos Principais:**")
+                        for req in key_reqs:
+                            st.write(f"- {req}")
+                    
+                    techs = requirements.get("technologies_mentioned", [])
+                    if techs:
+                        st.write("**Tecnologias:**")
+                        st.write(", ".join(techs))
+            
+            st.markdown("---")
+            st.markdown("### ✏️ Refinar Demanda")
+            st.info("💡 **Dica**: Seja mais específico nos pontos destacados acima. Adicione detalhes sobre métricas, visualizações, outputs esperados e critérios de decisão.")
+        
+        # Campo para demanda refinada
+        refined_demand = st.text_area(
+            "Nova versão da demanda (mais detalhada):",
+            value=state.get("user_demand", ""),
+            height=200,
+            key="refined_demand_input",
+            help="Reescreva sua demanda incorporando as sugestões acima"
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("✅ Aprovar Mesmo Assim", type="secondary", use_container_width=True):
+                # Aprovar sem refinamento
+                st.session_state.state["requirements_approved_by_user"] = True
+                st.session_state.execution_paused = False
                 
-                if invalid_models:
-                    st.error("Modelos inválidos ou sem API key:")
-                    for error in invalid_models:
-                        st.write(f"- {error}")
+                # Retomar execução
+                with st.spinner("Prosseguindo para planejamento..."):
+                    try:
+                        graph = st.session_state.graph
+                        config = {"configurable": {"thread_id": st.session_state.session_id}}
+                        
+                        result = graph.invoke(st.session_state.state, config)
+                        
+                        if result is not None:
+                            st.session_state.state = result
+                        
+                        st.success("Requisitos aprovados! Prosseguindo...")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao retomar: {str(e)}")
+        
+        with col2:
+            if st.button("🔄 Refinar e Reprocessar", type="primary", use_container_width=True):
+                if not refined_demand or len(refined_demand.strip()) < 20:
+                    st.error("Por favor, descreva a demanda refinada com mais detalhes")
                 else:
-                    # Iniciar execução
-                    st.session_state.user_demand = user_demand
-                    st.session_state.execution_started = True
+                    # Enviar demanda refinada
+                    st.session_state.state["refined_demand"] = refined_demand
+                    st.session_state.execution_paused = False
                     
-                    # Criar estado inicial
-                    initial_state = create_initial_state(
-                        user_demand=user_demand,
-                        session_id=st.session_state.session_id,
-                        selected_models=st.session_state.selected_models
-                    )
-                    
-                    st.session_state.state = initial_state
-                    
-                    # Criar grafo
-                    st.session_state.graph = create_agent_graph()
-                    
-                    logger.log_user_input("demand", user_demand)
-                    
-                    st.success("✅ Processamento iniciado!")
-                    st.rerun()
+                    # Retomar execução
+                    with st.spinner("Reprocessando com demanda refinada..."):
+                        try:
+                            graph = st.session_state.graph
+                            config = {"configurable": {"thread_id": st.session_state.session_id}}
+                            
+                            result = graph.invoke(st.session_state.state, config)
+                            
+                            if result is not None:
+                                st.session_state.state = result
+                            
+                            st.success("Demanda refinada! Reclassificando requisitos...")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao reprocessar: {str(e)}")
     
-    with col2:
-        if st.button("📋 Exemplos"):
-            st.session_state.show_examples = not st.session_state.get("show_examples", False)
-    
-    with col3:
-        if st.button("🗑️ Limpar"):
-            st.session_state.demand_input = ""
-            st.rerun()
-    
-    # Mostrar exemplos se solicitado
-    if st.session_state.get("show_examples", False):
-        with st.expander("💡 Exemplos de Demandas", expanded=True):
-            st.markdown("""
-            **Exemplo 1 - Análise de Mercado:**
-            ```
-            Quero uma análise do mercado de cartão de crédito no Brasil, comparando os 
-            principais players (bancos incumbentes e fintechs) sobre o ponto de vista do 
-            share do mercado. Preciso de dados atualizados, gráficos comparativos e 
-            insights sobre tendências.
-            ```
+    else:
+        # Fluxo normal - sem checkpoint ativo
+        user_demand = st.text_area(
+            "Sua demanda:",
+            height=200,
+            placeholder="Digite aqui sua demanda em linguagem natural...",
+            key="demand_input"
+        )
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            if st.button("🚀 Iniciar Processamento", type="primary", disabled=st.session_state.execution_started):
+                if not user_demand or len(user_demand.strip()) < 20:
+                    st.error("Por favor, descreva sua demanda com mais detalhes (mínimo 20 caracteres)")
+                else:
+                    # Validar modelos selecionados
+                    invalid_models = []
+                    for func, model in st.session_state.selected_models.items():
+                        if model:
+                            is_valid, error = validate_model(model)
+                            if not is_valid:
+                                invalid_models.append(f"{func}: {error}")
+                    
+                    if invalid_models:
+                        st.error("Modelos inválidos ou sem API key:")
+                        for error in invalid_models:
+                            st.write(f"- {error}")
+                    else:
+                        # Iniciar execução
+                        st.session_state.user_demand = user_demand
+                        st.session_state.execution_started = True
+                        
+                        # Criar estado inicial
+                        initial_state = create_initial_state(
+                            user_demand=user_demand,
+                            session_id=st.session_state.session_id,
+                            selected_models=st.session_state.selected_models
+                        )
+                        
+                        st.session_state.state = initial_state
+                        
+                        # Criar grafo
+                        st.session_state.graph = create_agent_graph()
+                        
+                        logger.log_user_input("demand", user_demand)
+                        
+                        st.success("✅ Processamento iniciado!")
+                        st.rerun()
+        
+        with col2:
+            if st.button("📋 Exemplos"):
+                st.session_state.show_examples = not st.session_state.get("show_examples", False)
+        
+        with col3:
+            if st.button("🗑️ Limpar"):
+                st.session_state.demand_input = ""
+                st.rerun()
+        
+        # Mostrar exemplos se solicitado
+        if st.session_state.get("show_examples", False):
+            with st.expander("💡 Exemplos de Demandas", expanded=True):
+                st.markdown("""
+                **Exemplo 1 - Análise de Mercado (BOM):**
+                ```
+                Quero uma análise do mercado de cartão de crédito no Brasil, comparando os 
+                principais players (bancos incumbentes e fintechs) sobre o ponto de vista do 
+                share do mercado. Preciso de dados atualizados, gráficos comparativos (pizza 
+                para share, barras para evolução temporal) e insights sobre tendências nos 
+                últimos 3 anos.
+                ```
+                
+                **Exemplo 2 - Pipeline Detalhado (BOM):**
+                ```
+                Tenho uma base de dados sobre saldo da carteira de crédito de cartão de crédito.
+                A base tem: customer_id, data_referencia, saldo_devedor, dias_atraso, limite_credito.
+                Preciso de um pipeline em PySpark que roda no Databricks para:
+                1. Calcular tendência da inadimplência 30+ dias (% de clientes com dias_atraso >= 30)
+                2. Visualizações: gráfico de linha com tendência mensal, heatmap por faixa de saldo
+                3. Alertas: enviar email quando inadimplência 30d crescer > 5% vs mês anterior
+                4. Output: tabela agregada mensal + dashboard no Databricks
+                ```
+                
+                **Exemplo 3 - Pipeline Vago (RUIM - evite):**
+                ```
+                Preciso de um pipeline para análise de inadimplência com visualizações e alertas.
+                ```
+                ❌ **Problemas**: Não especifica métricas, tipos de visualização, critérios de alerta
+                """)
+        
+        # Mostrar requisitos extraídos (se houver)
+        if state and state.get("requirements"):
+            st.markdown("---")
+            st.markdown("### ✅ Requisitos Extraídos")
             
-            **Exemplo 2 - Sistema de Testes A/B:**
-            ```
-            Preciso que seja criada uma solução completa para execução de Testes A/B em Python.
-            Deve incluir interface web, etapas de pareamento e balanceamento, até o cálculo 
-            do lift. O cliente vai subir Grupo teste e Grupo controle que devem ser pareados 
-            por variáveis. A saída deve ser um relatório didático sobre os resultados.
-            ```
+            req = state["requirements"]
             
-            **Exemplo 3 - Pipeline PySpark:**
-            ```
-            Tenho uma base de dados sobre saldo da carteira de crédito de cartão de crédito.
-            A base tem: customer_id, data_referencia, saldo_devedor, dias_atraso, limite_credito.
-            Preciso de um pipeline em PySpark que roda no Databricks para análise de tendência 
-            da inadimplência 30 dias, com visualizações e alertas.
-            ```
-            """)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Tipo", req.get("demand_type", "unknown").upper())
+            with col2:
+                st.metric("Confiança", f"{req.get('confidence_score', 0.0):.0%}")
+            with col3:
+                num_reqs = len(req.get("key_requirements", []))
+                st.metric("Requisitos", num_reqs)
+            
+            with st.expander("📋 Ver Detalhes"):
+                key_reqs = req.get("key_requirements", [])
+                if key_reqs:
+                    st.write("**Requisitos Principais:**")
+                    for r in key_reqs:
+                        st.write(f"- {r}")
+                
+                techs = req.get("technologies_mentioned", [])
+                if techs:
+                    st.write("**Tecnologias:**")
+                    st.write(", ".join(techs))
+                
+                constraints = req.get("constraints", [])
+                if constraints:
+                    st.write("**Restrições:**")
+                    for c in constraints:
+                        st.write(f"- {c}")
 
 # TAB 2: PLANEJAMENTO
 with tab2:
@@ -503,6 +657,7 @@ with tab2:
 # Procure por "# TAB 3: EXECUÇÃO" no seu app.py e substitua todo o conteúdo
 # da aba tab3 por este código:
 
+# TAB 3: EXECUÇÃO - AJUSTADO PARA CHECKPOINT DE REQUISITOS
 with tab3:
     st.markdown("### ⚙️ Status da Execução")
     
@@ -522,6 +677,7 @@ with tab3:
             # Progress bar (aproximado)
             steps_order = [
                 "classification", "review_requirements",
+                "waiting_requirements_refinement",  # ✅ NOVO
                 "create_planning_prompts", "create_plan", "review_plan",
                 "wait_user_approval", "build_solution", "review_solution",
                 "validate_solution", "completed"
@@ -548,16 +704,27 @@ with tab3:
                 st.metric("Custo Estimado", f"${state.get('total_cost', 0.0):.4f}")
             
             with col4:
-                iteration = state.get("feedback_iteration", 0)
-                st.metric("Iterações", iteration)
+                # ✅ AJUSTADO: Mostrar iterações de ambos os checkpoints
+                req_iter = state.get("requirements_refinement_iteration", 0)
+                plan_iter = state.get("feedback_iteration", 0)
+                total_iter = req_iter + plan_iter
+                st.metric("Iterações", total_iter)
             
             st.markdown("---")
             
-            # ✅ CORRIGIDO: Verificar se já está no checkpoint
+            # ✅ AJUSTADO: Verificar ambos os checkpoints
             current_step = state.get("current_step", "")
-            if current_step in ["wait_user_approval", "waiting_approval"]:
+            
+            # Checkpoint de Requisitos
+            if current_step == "waiting_requirements_refinement":
                 st.session_state.execution_paused = True
-                st.warning("⏸️ **Execução pausada no checkpoint**")
+                st.warning("⏸️ **Execução pausada no checkpoint de requisitos**")
+                st.info("👉 Vá para a aba **'Input da Demanda'** para refinar sua demanda ou aprovar os requisitos.")
+            
+            # Checkpoint de Plano
+            elif current_step in ["wait_user_approval", "waiting_approval"]:
+                st.session_state.execution_paused = True
+                st.warning("⏸️ **Execução pausada no checkpoint do plano**")
                 st.info("👉 Vá para a aba **'Planejamento'** para aprovar ou solicitar ajustes no plano.")
             
             # Botão de execução
@@ -565,36 +732,38 @@ with tab3:
                 if st.button("▶️ Executar Próximo Passo", type="primary", use_container_width=True):
                     with st.spinner("Executando..."):
                         try:
-                            # Executar um passo do grafo
                             config = {"configurable": {"thread_id": st.session_state.session_id}}
                             
                             result = graph.invoke(state, config)
                             
-                            # ✅ CORRIGIDO: Verificar se resultado é válido sem usar return
                             if result is None:
                                 st.error("❌ Erro: Grafo retornou None. Possível problema de configuração.")
                                 logger.log_node_error("execution", Exception("Graph returned None"))
                             else:
-                                # Atualizar estado apenas se result não for None
                                 st.session_state.state = result
                                 
-                                # Verificar se chegou no checkpoint
-                                if result.get("current_step") in ["wait_user_approval", "waiting_approval"]:
+                                # Verificar se chegou em algum checkpoint
+                                new_step = result.get("current_step", "")
+                                if new_step in ["waiting_requirements_refinement", "wait_user_approval", "waiting_approval"]:
                                     st.session_state.execution_paused = True
-                                    st.info("⏸️ Execução pausada. Aguardando sua aprovação na aba 'Planejamento'")
+                                    if new_step == "waiting_requirements_refinement":
+                                        st.info("⏸️ Execução pausada. Refine sua demanda na aba 'Input da Demanda'")
+                                    else:
+                                        st.info("⏸️ Execução pausada. Aprove o plano na aba 'Planejamento'")
                                 
-                                # Recarregar página
                                 st.rerun()
                             
                         except Exception as e:
                             st.error(f"❌ Erro na execução: {str(e)}")
-                            # Mostrar traceback completo em um expander
                             with st.expander("🔍 Ver detalhes do erro"):
                                 import traceback
                                 st.code(traceback.format_exc())
                             logger.log_node_error("execution", e)
             else:
-                st.info("⏸️ Execução pausada. Aprove o plano na aba 'Planejamento' para continuar.")
+                if current_step == "waiting_requirements_refinement":
+                    st.info("⏸️ Execução pausada. Refine sua demanda na aba 'Input da Demanda' para continuar.")
+                else:
+                    st.info("⏸️ Execução pausada. Aprove o plano na aba 'Planejamento' para continuar.")
             
             # Mensagens e erros
             if state.get("errors"):
@@ -606,7 +775,6 @@ with tab3:
                 st.markdown("### ⚠️ Avisos")
                 for warning in state["warnings"]:
                     st.warning(warning)
-
 
 # TAB 4: RESULTADOS
 with tab4:
